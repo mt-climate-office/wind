@@ -36,10 +36,35 @@ process_year <- function(year){
 }
 
 montana_wind <-
-  1979:2020 %>%
+  1991:2020 %>%
   magrittr::set_names(.,.) %>%
-  purrr::map(process_year)
+  purrr::map(process_year) %>%
+  purrr::transpose() %>%
+  purrr::map(function(x){
+    purrr::map(x, function(y){
+      raster::brick(y) %>%
+        magrittr::set_names(.,names(.)%>%
+                               stringr::str_remove(".*\\.") %>%
+                               as.integer() %>%
+                               month.name[.]) %>%
+        {magrittr::set_names(raster::unstack(.), names(.))}
+    }) %>%
+      purrr::transpose() %>%
+      purrr::map(raster::brick) %>%
+      purrr::map(terra::rast)
+  })
 
+rastlm <- function(x){
+  magrittr::set_names(lm(x ~ c(1:30))$coefficients,c("Intercept","Slope"))
+}
 
+montana_wind_lms <-
+  montana_wind$mean %>%
+  purrr::map(terra::app,
+             fun = rastlm)
+  # purrr::map(~purrr::map(.x,
+  #                        terra::app,
+  #                       fun = rastlm))
 
-
+mapview::mapview(raster::raster(montana_wind_lms$January$Slope))
+  

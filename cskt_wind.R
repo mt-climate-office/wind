@@ -2,36 +2,35 @@ library(rgee)
 library(reticulate)
 library(mcor)
 library(magrittr)
+library(tidyverse)
 
 ee_Initialize()
 # # 2. Install geemap in the same Python ENV that use rgee
 # py_install("geemap")
 # gm <- import("geemap")
 
-blackfeet <- mcor::mt_tribal_land %>%
-  dplyr::filter(Name == "Blackfeet") %>%
+flathead <- mcor::mt_tribal_land %>%
+  dplyr::filter(Name == "Flathead") %>%
   sf::st_transform(4326) %>%
   dplyr::rename(geometry = SHAPE)
 
-gridmet_wind <- 
-  ee$ImageCollection("IDAHO_EPSCOR/GRIDMET") %>%
-  ee$ImageCollection$filterDate("1979-01-01", "1980-12-31") %>%
-  ee$ImageCollection$map(function(x) x$select("vs"))
+# gridmet_wind <- 
+#   ee$ImageCollection("IDAHO_EPSCOR/GRIDMET") %>%
+#   ee$ImageCollection$filterDate("1979-01-01", "1980-12-31") %>%
+#   ee$ImageCollection$map(function(x) x$select("vs"))
 
 
-
-
-blackfeet_max_wind <-
+flathead_max_wind <-
   purrr::map(1979:2022,
              ~ee_extract(x = ee$ImageCollection("IDAHO_EPSCOR/GRIDMET") %>%
                           ee$ImageCollection$filterDate(paste0(.x,"-01-01"), paste0(.x,"-12-31")) %>%
                           ee$ImageCollection$map(function(x) x$select("vs")), 
-                        y = blackfeet,
+                        y = flathead,
                         fun = ee$Reducer$max())
              )
 
-blackfeet_max_wind_processed <- 
-  blackfeet_max_wind %>%
+flathead_max_wind_processed <- 
+  flathead_max_wind %>%
   dplyr::bind_rows() %>%
   tidyr::pivot_longer(-Name,
                       names_to = "Date",
@@ -43,8 +42,8 @@ blackfeet_max_wind_processed <-
                 `Wind Speed` = units::set_units(`Wind Speed`, "m/s") %>%
                   units::set_units("mi/hr")) 
 
-blackfeet_max_wind_processed_monthly <-
-  blackfeet_max_wind_processed %>%
+flathead_max_wind_processed_monthly <-
+  flathead_max_wind_processed %>%
   dplyr::group_by(Year = lubridate::year(Date),
                   Month = factor(month.abb[lubridate::month(Date)],
                                  ordered = TRUE,
@@ -53,15 +52,15 @@ blackfeet_max_wind_processed_monthly <-
                    `Max Wind Speed` = max(`Wind Speed`, na.rm = TRUE),
                    `Windy Days` = sum(`Wind Speed` >= units::set_units(20,"mi/hr"), na.rm = TRUE))
 
-blackfeet_max_wind_processed_monthly %>%
+flathead_max_wind_processed_monthly %>%
   dplyr::rename(`Mean Wind Speed (mi/hr)` = `Mean Wind Speed`,
                 `Max Wind Speed (mi/hr)` = `Max Wind Speed`) %>%
   dplyr::mutate(dplyr::across(`Mean Wind Speed (mi/hr)`:`Max Wind Speed (mi/hr)`,
                               round,
                               digits = 2)) %>%
-  readr::write_csv("blackfeet_wind.csv")
+  readr::write_csv("flathead_wind.csv")
 
-blackfeet_max_wind_processed_monthly %>%
+flathead_max_wind_processed_monthly %>%
   dplyr::mutate(dplyr::across(`Mean Wind Speed`:`Max Wind Speed`, units::drop_units)) %>%
   tidyr::pivot_longer(`Mean Wind Speed`:`Windy Days`,
                       names_to = "Variable") %>%
@@ -88,9 +87,6 @@ blackfeet_max_wind_processed_monthly %>%
              ncol = 1,
              scales = "free_y")
   
-  ggsave("blackfeet_wind.pdf",
+  ggsave("flathead_wind.pdf",
          width = 24,
          height = 12)
-
-
-
